@@ -12,6 +12,12 @@ struct ContentView: View {
     @State private var showIPPrompt = false
     @State private var forecastDays: [DayForecast] = []
     @State private var showLanguageMenu = false
+    @State private var lastRefreshTime: Date?
+    @State private var showAbout = false
+
+    private let refreshCooldown: TimeInterval = 3  // seconds
+    private let appVersion = "2.0.2"
+    private let appBuild = "1"
 
     var body: some View {
         ZStack {
@@ -56,13 +62,12 @@ struct ContentView: View {
         .onReceive(locationManager.$useIPLocation) { useIP in
             Task {
                 if useIP {
-                    // Переключились на IP - запросим IP координаты
-                    await locationManager.fetchIPLocation()
+                    // Только загружаем если еще не загружена
+                    if locationManager.ipLocation == nil {
+                        await locationManager.fetchIPLocation()
+                    }
                 } else if locationManager.isAuthorized {
-                    // Переключились на GPS - запросим GPS координаты
                     locationManager.requestLocation()
-                    // Даем GPS время на обновление
-                    try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 секунды
                 }
                 await loadWeather()
             }
@@ -71,12 +76,17 @@ struct ContentView: View {
             Button(localization.localize("allow")) {
                 Task {
                     await locationManager.fetchIPLocation()
+                    // Дайте MainActor время на обновление
+                    try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 сек
                     await loadWeather()
                 }
             }
             Button(localization.localize("deny"), role: .cancel) {}
         } message: {
             Text(localization.localize("gps_unavailable"))
+        }
+        .sheet(isPresented: $showAbout) {
+            AboutView(isPresented: $showAbout, appVersion: appVersion, appBuild: appBuild)
         }
     }
 
@@ -99,7 +109,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Walk Advisor")
+                        Text(localization.localize("app_title"))
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
 
@@ -374,10 +384,12 @@ struct ContentView: View {
             .cornerRadius(8)
 
             // Кнопки действия
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Button(action: {
-                    Task {
-                        await loadWeather()
+                    if canRefresh() {
+                        Task {
+                            await loadWeather()
+                        }
                     }
                 }) {
                     HStack(spacing: 6) {
@@ -390,10 +402,24 @@ struct ContentView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
-                    .background(Color.white.opacity(isLoading ? 0.3 : 0.2))
+                    .background(Color.white.opacity(isLoading || !canRefresh() ? 0.3 : 0.2))
                     .cornerRadius(6)
                 }
-                .disabled(isLoading)
+                .disabled(isLoading || !canRefresh())
+                .help(canRefresh() ? "" : "Please wait before refreshing again")
+
+                Button(action: { showAbout = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle")
+                        Text("About")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.2))
+                    .cornerRadius(6)
+                }
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)
@@ -423,42 +449,39 @@ struct ContentView: View {
         var longitude: Double
 
         if locationManager.useIPLocation {
-            // IP режим: запросим IP координаты
-            await locationManager.fetchIPLocation()
-            guard let ipLoc = locationManager.ipLocation else {
+            // IP режим - убедимся что координаты загружены
+            let result = await ensureIPLocation()
+            guard result else {
                 errorMessage = locationManager.errorMessage ?? localization.localize("no_location")
+                return
+            }
+
+            guard let ipLoc = locationManager.ipLocation else {
+                errorMessage = localization.localize("no_location")
                 return
             }
             latitude = ipLoc.latitude
             longitude = ipLoc.longitude
         } else {
-            // GPS режим: запросим свежие GPS координаты
+            // GPS режим
             if locationManager.isAuthorized {
-                locationManager.requestLocation()
-                // Ждем получения GPS координат (до 2 секунд)
-                var gpsLocation: CLLocationCoordinate2D?
-                for _ in 0..<20 {
-                    if let location = locationManager.location {
-                        gpsLocation = location
-                        break
-                    }
-                    try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 секунды
-                }
-
-                guard let location = gpsLocation else {
-                    errorMessage = localization.localize("no_location")
+                do {
+                    let location = try await locationManager.waitForLocation(timeout: 10)
+                    latitude = location.latitude
+                    longitude = location.longitude
+                } catch {
+                    errorMessage = "GPS Error: \(error.localizedDescription)"
                     return
                 }
-                latitude = location.latitude
-                longitude = location.longitude
             } else {
-                // GPS не авторизирована
                 showIPPrompt = true
                 return
             }
         }
 
         do {
+            try validateCoordinates(latitude: latitude, longitude: longitude)
+
             let data = try await WeatherService.shared.fetchWeather(
                 latitude: latitude,
                 longitude: longitude
@@ -476,9 +499,52 @@ struct ContentView: View {
             self.forecastDays = WeatherService.shared.getForecastDays(from: data.daily)
             self.lastUpdate = Date()
             self.errorMessage = nil
+
+            // Обновляем время последнего успешного обновления только если успешно
+            lastRefreshTime = Date()
         } catch {
-            self.errorMessage = "\(localization.localize("error_loading")): \(error.localizedDescription)"
+            let errorDesc = truncateErrorMessage(error.localizedDescription)
+            self.errorMessage = "\(localization.localize("error_loading")): \(errorDesc)"
         }
+    }
+
+    private func validateCoordinates(latitude: Double, longitude: Double) throws {
+        guard (-90...90).contains(latitude) else {
+            throw LocationError.invalidCoordinates
+        }
+        guard (-180...180).contains(longitude) else {
+            throw LocationError.invalidCoordinates
+        }
+    }
+
+    private func canRefresh() -> Bool {
+        if let lastTime = lastRefreshTime {
+            return Date().timeIntervalSince(lastTime) >= refreshCooldown
+        }
+        return true
+    }
+
+    private func truncateErrorMessage(_ message: String, maxLength: Int = 100) -> String {
+        if message.count > maxLength {
+            return String(message.prefix(maxLength)) + "..."
+        }
+        return message
+    }
+
+    private func ensureIPLocation() async -> Bool {
+        // Если уже есть ipLocation, используем её
+        if locationManager.ipLocation != nil {
+            return true
+        }
+
+        // Иначе загружаем
+        await locationManager.fetchIPLocation()
+
+        // Даем время на обновление @Published свойства
+        try? await Task.sleep(nanoseconds: 200_000_000)  // 0.2 сек
+
+        // Проверяем что загрузилось
+        return locationManager.ipLocation != nil
     }
 
     private func formatTime(_ date: Date) -> String {

@@ -1,5 +1,10 @@
 import Foundation
 
+enum UserDefaultsKeys {
+    static let useIPLocation = "useIPLocation"
+    static let selectedLanguage = "selectedLanguage"
+}
+
 enum Language: String, CaseIterable {
     case english = "en"
     case russian = "ru"
@@ -19,14 +24,14 @@ enum Language: String, CaseIterable {
 class LocalizationManager: ObservableObject {
     @Published var currentLanguage: Language {
         didSet {
-            UserDefaults.standard.set(currentLanguage.rawValue, forKey: "selectedLanguage")
+            UserDefaults.standard.set(currentLanguage.rawValue, forKey: UserDefaultsKeys.selectedLanguage)
         }
     }
 
     static let shared = LocalizationManager()
 
     init() {
-        let savedLanguage = UserDefaults.standard.string(forKey: "selectedLanguage") ?? "ru"
+        let savedLanguage = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedLanguage) ?? "ru"
         self.currentLanguage = Language(rawValue: savedLanguage) ?? .russian
     }
 

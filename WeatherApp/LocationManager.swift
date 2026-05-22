@@ -8,6 +8,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var errorMessage: String?
     @Published var useIPLocation = false
     @Published var ipLocation: LocationData?
+    @Published var isWaitingForLocation = false
 
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
@@ -43,27 +44,82 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
 
+    func waitForLocation(timeout: TimeInterval = 10) async throws -> CLLocationCoordinate2D {
+        if let currentLocation = location {
+            return currentLocation
+        }
+
+        isWaitingForLocation = true
+        defer { isWaitingForLocation = false }
+
+        manager.requestLocation()
+
+        let startTime = Date()
+        while Date().timeIntervalSince(startTime) < timeout {
+            if let currentLocation = location {
+                return currentLocation
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)  // 0.1 seconds
+        }
+
+        throw LocationError.timeout
+    }
+
     func fetchIPLocation() async {
         do {
-            let url = URL(string: "https://ipapi.co/json/")!
-            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let url = URL(string: "http://ip-api.com/json") else {
+                await MainActor.run {
+                    self.errorMessage = "Invalid URL"
+                }
+                return
+            }
+
+            let (data, response) = try await URLSession.shared.data(from: url)
+
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode < 200 || httpResponse.statusCode >= 300 {
+                    await MainActor.run {
+                        self.errorMessage = "IP API error: \(httpResponse.statusCode)"
+                    }
+                    return
+                }
+            }
+
             let decoder = JSONDecoder()
-            let response = try decoder.decode(IPResponse.self, from: data)
+            let ipResponse = try decoder.decode(IPApiResponse.self, from: data)
+
+            guard ipResponse.status == "success" else {
+                await MainActor.run {
+                    self.errorMessage = "Failed to get location from IP"
+                }
+                return
+            }
+
+            // Validate coordinates from IP API
+            guard (-90...90).contains(ipResponse.lat),
+                  (-180...180).contains(ipResponse.lon) else {
+                await MainActor.run {
+                    self.errorMessage = "Invalid coordinates from IP API"
+                }
+                return
+            }
+
+            let newLocation = LocationData(
+                latitude: ipResponse.lat,
+                longitude: ipResponse.lon,
+                city: ipResponse.city,
+                country: ipResponse.country
+            )
 
             await MainActor.run {
-                self.ipLocation = LocationData(
-                    latitude: response.latitude,
-                    longitude: response.longitude,
-                    city: response.city,
-                    country: response.country_name
-                )
-                self.locationName = "\(response.city), \(response.country_name)"
+                self.ipLocation = newLocation
+                self.locationName = "\(ipResponse.city), \(ipResponse.country)"
                 self.useIPLocation = true
                 self.savePreferences()
             }
         } catch {
             await MainActor.run {
-                self.errorMessage = "Ошибка определения по IP: \(error.localizedDescription)"
+                self.errorMessage = "IP error: \(error.localizedDescription)"
             }
         }
     }
@@ -74,11 +130,11 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     private func savePreferences() {
-        UserDefaults.standard.set(useIPLocation, forKey: "useIPLocation")
+        UserDefaults.standard.set(useIPLocation, forKey: UserDefaultsKeys.useIPLocation)
     }
 
     private func loadPreferences() {
-        useIPLocation = UserDefaults.standard.bool(forKey: "useIPLocation")
+        useIPLocation = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useIPLocation)
     }
 
     private func reverseGeocode(coordinate: CLLocationCoordinate2D) {
@@ -122,9 +178,27 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 }
 
-struct IPResponse: Codable {
-    let latitude: Double
-    let longitude: Double
+struct IPApiResponse: Codable {
+    let status: String
     let city: String
-    let country_name: String
+    let country: String
+    let lat: Double
+    let lon: Double
+}
+
+enum LocationError: LocalizedError {
+    case timeout
+    case invalidCoordinates
+    case permissionDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .timeout:
+            return "GPS timeout: location acquisition took too long"
+        case .invalidCoordinates:
+            return "Invalid location coordinates"
+        case .permissionDenied:
+            return "Location permission denied"
+        }
+    }
 }

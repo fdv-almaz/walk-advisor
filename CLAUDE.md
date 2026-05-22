@@ -4,6 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Start
 
+### System Requirements for Building
+
+Before building, ensure you have:
+- **macOS 12.0+** (Monterey or later)
+- **Swift 5.5+** with async/await support (use Xcode Command Line Tools)
+- **Internet connection** for weather API calls
+
+Verify Swift installation:
+```bash
+swift --version  # Should show 5.5 or later
+```
+
 ### Building the App
 
 **Standard build (current architecture):**
@@ -25,6 +37,7 @@ The `build.sh` script:
 - Compiles Swift files with swiftc (targets macOS 12+)
 - Creates proper macOS .app bundle structure with Contents/MacOS, Contents/Resources
 - Copies Info.plist and app icon from Icons/AppIcon_512.icns
+- Uses `-O` optimization flag for release build
 - Outputs to `build/Walk Advisor.app`
 
 The `build_universal.sh` script:
@@ -61,8 +74,15 @@ walk-advisor/
 - Main UI layout using SwiftUI
 - Displays current weather, activity score, and 5-day forecast
 - ScrollView for responsive content handling
-- Handles GPS/IP toggle button
+- Handles GPS/IP toggle button and About button
 - Color-coded activity recommendations (green/blue/orange/red)
+
+**AboutView.swift** (information dialog)
+- About application dialog
+- Displays app version, build number, and developer info
+- Shows API server information (Open-Meteo, ipapi.co)
+- Lists application features
+- License information (MIT)
 
 **Models.swift** (data layer)
 - `WeatherData`, `CurrentWeather`, `DailyForecast` - Codable structs for Open-Meteo API JSON
@@ -145,12 +165,6 @@ Adjust weights or thresholds here if recommendation feels off.
 
 ## Common Tasks
 
-### Quick Test (Current Architecture)
-```bash
-./test_app.sh
-```
-Automatically detects your system (arm64 or x86_64) and launches the appropriate build.
-
 ### Run the App
 ```bash
 cd WeatherApp && ./build.sh && open build/Walk\ Advisor.app
@@ -161,12 +175,11 @@ cd WeatherApp && ./build.sh && open build/Walk\ Advisor.app
 cd WeatherApp && ./build.sh && open build/Walk\ Advisor.app
 ```
 
-### Build and Test on Both Architectures
+### Test on Both Architectures
 ```bash
 cd WeatherApp && ./build_universal.sh
 # Then test both: open build/Walk\ Advisor.arm64.app and open build/Walk\ Advisor.x86_64.app
 ```
-The universal build creates separate binaries optimized for each architecture.
 
 ### Check Permissions (if GPS not working)
 ```bash
@@ -182,6 +195,63 @@ tccutil grant location /Applications/Xcode.app
 The build.sh detects arm64 (Apple Silicon) vs x86_64 (Intel) automatically.
 - For universal binary: compile separately with both ARCH_FLAGS and lipo together
 
+## Icon Management
+
+To update the app icon:
+```bash
+cd WeatherApp
+./create_icon.sh /path/to/source/image.png
+```
+
+This script converts a PNG image to macOS `.icns` format and places it in `Icons/AppIcon_512.icns`. The build script automatically includes this icon in the app bundle. For best results, use a square image (512x512 or larger).
+
+## Troubleshooting
+
+### Build Issues
+
+**"swift: command not found"**
+```bash
+xcode-select --install  # Install Command Line Tools
+```
+
+**"Cannot find Swift compiler"**
+```bash
+# Verify Swift is available
+swift --version
+
+# If not, reinstall Xcode Command Line Tools
+xcode-select --install
+rm -rf build/
+./build.sh
+```
+
+### Runtime Issues
+
+**"GPS permission denied" or geolocation not working**
+```bash
+# Grant location permission to terminal/app running the build
+tccutil grant location /Applications/Xcode.app
+
+# Or manually:
+# System Settings → Privacy & Security → Location Services → enable Terminal/Xcode
+```
+
+**"Weather data not loading" / "API error"**
+- Verify internet connection is active
+- Check if https://api.open-meteo.com is accessible
+- Try toggling between GPS and IP geolocation modes
+- Restart the app
+
+**"App crashes on launch"**
+- Ensure macOS 12.0 or later is running
+- Clean build: `rm -rf build/` then `./build.sh`
+- Check Console.app for detailed error messages
+
+**"Location shows wrong coordinates"**
+- IP geolocation is approximate (city-level accuracy)
+- Ensure GPS permission is granted (Settings → Privacy & Security → Location Services)
+- Wait 5-10 seconds for GPS to acquire lock on first run
+
 ## Key Files Reference
 
 | File | Purpose | Key Classes |
@@ -196,6 +266,7 @@ The build.sh detects arm64 (Apple Silicon) vs x86_64 (Intel) automatically.
 ## Important Notes
 
 - **No external dependencies**: Uses only Swift stdlib + system frameworks
+  - Framework dependencies: SwiftUI, CoreLocation, AppKit, Foundation
 - **Architecture support**: Auto-detects Intel vs Apple Silicon via `uname -m`
 - **API key needed**: None - Open-Meteo is free
 - **macOS version**: Targets macOS 12+ (Monterey)
@@ -204,25 +275,23 @@ The build.sh detects arm64 (Apple Silicon) vs x86_64 (Intel) automatically.
 - **Languages supported**: English, Russian, Polish, Belarusian (4 total)
 - **Swift version**: Swift 5.5+ required (uses async/await syntax)
 - **Testing**: Manual testing only - no automated test suite
-- **Last verified**: 2026-05-22 - All code issues fixed, fully functional
+- **App version**: 2.0.2 (defined in Info.plist CFBundleShortVersionString)
+- **Last verified**: 2026-05-22 - With About dialog, all tests passed
 
-## Recent Fixes
+## Recent Fixes (v2.0.1)
 
-The app is fully functional with these fixes implemented:
 - Fixed locale hardcoding in date formatting (now respects selected language)
 - Fixed IP geolocation not loading when toggled from GPS
 - Fixed incorrect localization label in activity score display
 - Ensured macOS 12.0 compatibility with `onReceive` instead of newer `onChange` syntax
 
-**Note:** Update Info.plist `CFBundleShortVersionString` when releasing a new version.
+## Additional Documentation
 
-## Testing Checklist Before Release
+For more detailed information, refer to these files in the project:
 
-After any code changes:
-1. Run `./test_app.sh` on current architecture
-2. Run `cd WeatherApp && ./build_universal.sh` to build both Intel and Apple Silicon
-3. Test on actual arm64 Mac (if available) or simulator with the .arm64.app build
-4. Test on Intel Mac (if available) or verify with x86_64.app build
-5. Test all 4 languages (en, ru, pl, be) by changing language in the app
-6. Test GPS mode: Grant location permission, verify weather updates
-7. Test IP mode: Deny location permission, click toggle to IP mode, verify weather loads
+- **[WeatherApp/DEVELOPMENT.md](WeatherApp/DEVELOPMENT.md)** — Detailed development guide with component breakdown
+- **[WeatherApp/LOCALIZATION_GUIDE.md](WeatherApp/LOCALIZATION_GUIDE.md)** — Instructions for adding new languages
+- **[WeatherApp/CHANGELOG.md](WeatherApp/CHANGELOG.md)** — Complete version history
+- **[WeatherApp/README.md](WeatherApp/README.md)** — Comprehensive project overview
+- **[START_HERE.md](START_HERE.md)** — Quick start guide in Russian (for users)
+- **[WeatherApp/QUICKSTART.md](WeatherApp/QUICKSTART.md)** — Fast setup instructions

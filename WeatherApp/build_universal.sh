@@ -38,6 +38,7 @@ build_for_arch() {
         -o "$APP_PATH/Contents/MacOS/$APP_EXECUTABLE" \
         "$PROJECT_DIR/WeatherApp.swift" \
         "$PROJECT_DIR/ContentView.swift" \
+        "$PROJECT_DIR/AboutView.swift" \
         "$PROJECT_DIR/Models.swift" \
         "$PROJECT_DIR/LocationManager.swift" \
         "$PROJECT_DIR/WeatherService.swift" \
