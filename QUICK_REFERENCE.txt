@@ -1,0 +1,77 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                 WALK ADVISOR V2.0.1 — QUICK REFERENCE GUIDE               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📦 DISTRIBUTION FILES LOCATION:
+  /Users/fdv/projects/walk-advisor/dist/
+
+📥 FILES READY FOR DOWNLOAD:
+  1. WalkAdvisor_2.0.1.dmg          ← Recommend this to users ⭐
+  2. WalkAdvisor_2.0.1_arm64.pkg     ← For Silicon Macs
+  3. WalkAdvisor_2.0.1_x86_64.pkg    ← For Intel Macs
+
+🧪 QUICK TEST:
+  ./test_app.sh
+
+🔨 REBUILD PROJECT:
+  cd WeatherApp && ./build_universal.sh
+
+📍 KEY FILES:
+  📄 RELEASE_NOTES_2.0.1.md      ← Share with users
+  📄 DISTRIBUTION_GUIDE.md        ← Complete distribution manual
+  🎨 Icons/AppIcon_512.icns       ← New application icon
+  💾 build/Walk Advisor.*.app/    ← Compiled binaries
+
+🌐 SYSTEM REQUIREMENTS:
+  • macOS 12.0+ (Monterey or later)
+  • No external dependencies
+  • Requires internet for weather data
+
+🗣️ LANGUAGES SUPPORTED:
+  • English (en)
+  • Русский (ru)
+  • Polski (pl)
+  • Беларускі (be)
+
+⚡ FEATURES:
+  • Real-time weather (Open-Meteo API)
+  • Activity score (0-100%)
+  • GPS + IP geolocation
+  • 5-day forecast
+  • Multi-language UI
+
+📊 VERSION INFO:
+  Version: 2.0.1
+  Release Date: May 22, 2026
+  Status: ✅ Ready for Distribution
+
+🔐 INTEGRITY:
+  ✓ Code signed: No (optional)
+  ✓ Notarized: No (optional for distribution outside App Store)
+  ✓ Security: Zero tracking, no telemetry
+
+═════════════════════════════════════════════════════════════════════════════
+DISTRIBUTION WORKFLOW:
+═════════════════════════════════════════════════════════════════════════════
+1. Test locally:               ./test_app.sh
+2. Upload dist/ files to CDN:  rsync/scp/upload tool
+3. Update website links:       Add links to WalkAdvisor_2.0.1.dmg
+4. Announce release:           Use RELEASE_NOTES_2.0.1.md
+5. Monitor for issues:         Check user feedback
+
+═════════════════════════════════════════════════════════════════════════════
+SUPPORT NOTES:
+═════════════════════════════════════════════════════════════════════════════
+Users having problems?
+  • First launch: Grant location permission when prompted
+  • Weather not loading: Check internet connection
+  • Old Intel Macs: Download x86_64 version
+  • Newer Silicon Macs: Download arm64 version (faster)
+  • Multiple architectures: Use universal DMG (works on both)
+
+═════════════════════════════════════════════════════════════════════════════
+
+Need to rebuild? Just run:
+  ./build_universal.sh
+
+All done! Ready to ship! 🚀
