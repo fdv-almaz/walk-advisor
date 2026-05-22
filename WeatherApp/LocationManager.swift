@@ -67,7 +67,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func fetchIPLocation() async {
         do {
-            guard let url = URL(string: "http://ip-api.com/json") else {
+            guard let url = URL(string: "https://ip-api.com/json") else {
                 await MainActor.run {
                     self.errorMessage = "Invalid URL"
                 }
@@ -76,13 +76,18 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
             let (data, response) = try await URLSession.shared.data(from: url)
 
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode < 200 || httpResponse.statusCode >= 300 {
-                    await MainActor.run {
-                        self.errorMessage = "IP API error: \(httpResponse.statusCode)"
-                    }
-                    return
+            guard let httpResponse = response as? HTTPURLResponse else {
+                await MainActor.run {
+                    self.errorMessage = "Invalid response from IP API"
                 }
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                await MainActor.run {
+                    self.errorMessage = "IP API error: \(httpResponse.statusCode)"
+                }
+                return
             }
 
             let decoder = JSONDecoder()
@@ -167,7 +172,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        errorMessage = "Ошибка геопозиции: \(error.localizedDescription)"
+        let localization = LocalizationManager.shared
+        errorMessage = "\(localization.localize("location_error")): \(error.localizedDescription)"
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

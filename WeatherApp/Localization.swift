@@ -96,6 +96,7 @@ class LocalizationManager: ObservableObject {
             "ideal": "Ideal",
             "allow": "Allow",
             "deny": "Deny",
+            "location_error": "Location error",
         ]
     }
 
@@ -142,6 +143,7 @@ class LocalizationManager: ObservableObject {
             "ideal": "Идеально",
             "allow": "Разрешить",
             "deny": "Отклонить",
+            "location_error": "Ошибка геопозиции",
         ]
     }
 
@@ -188,6 +190,7 @@ class LocalizationManager: ObservableObject {
             "ideal": "Idealnie",
             "allow": "Zezwól",
             "deny": "Odmów",
+            "location_error": "Błąd lokalizacji",
         ]
     }
 
@@ -234,6 +237,7 @@ class LocalizationManager: ObservableObject {
             "ideal": "Ідэально",
             "allow": "Дазволіць",
             "deny": "Адмовіць",
+            "location_error": "Памылка месцазнаходжання",
         ]
     }
 }
